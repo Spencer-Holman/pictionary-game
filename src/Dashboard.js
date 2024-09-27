@@ -6,6 +6,8 @@ function Dashboard() {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
+  const [history, setHistory] = useState([]); // To store the drawing history
+  const [redoStack, setRedoStack] = useState([]); // To store undone states for redo
 
   // Select the drawing tool (you can add more tools later)
   const selectTool = () => {
@@ -24,7 +26,15 @@ function Dashboard() {
 
   // Stop drawing when the mouse is released
   const stopDrawing = () => {
+    if (!isDrawing) return;
+    
     setIsDrawing(false);
+
+    // Save the current canvas state to history after each drawing action
+    const canvas = canvasRef.current;
+    const canvasData = canvas.toDataURL();
+    setHistory([...history, canvasData]); // Add new canvas state to history
+    setRedoStack([]); // Clear the redo stack when new drawing occurs
   };
 
   // Draw on the canvas
@@ -35,22 +45,65 @@ function Dashboard() {
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
     
-    // Get the current mouse position
     const currentPosition = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top
     };
 
-    // Draw a line from the last position to the current position
     ctx.beginPath();
     ctx.moveTo(lastPosition.x, lastPosition.y);
     ctx.lineTo(currentPosition.x, currentPosition.y);
-    ctx.strokeStyle = 'black'; // You can change the color based on tool selection
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'black'; // Set line color
+    ctx.lineWidth = 2; // Set line width
     ctx.stroke();
 
-    // Update the last position
-    setLastPosition(currentPosition);
+    setLastPosition(currentPosition); // Update the last position
+  };
+
+  // Undo function: revert to the previous state
+  const undo = () => {
+    if (history.length === 0) return;
+
+    const newHistory = [...history];
+    const lastState = newHistory.pop(); // Remove the latest state
+    setRedoStack([...redoStack, lastState]); // Save the undone state in redo stack
+    setHistory(newHistory); // Update the history with the new version
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const previousState = newHistory[newHistory.length - 1]; // Get the previous state
+
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Repaint the previous state if it exists
+    if (previousState) {
+      const img = new Image();
+      img.src = previousState;
+      img.onload = () => ctx.drawImage(img, 0, 0);
+    }
+  };
+
+  // Redo function: reapply the undone state
+  const redo = () => {
+    if (redoStack.length === 0) return;
+
+    const newRedoStack = [...redoStack];
+    const redoState = newRedoStack.pop(); // Get the last undone state
+    setRedoStack(newRedoStack); // Update the redo stack
+
+    setHistory([...history, redoState]); // Add the redone state back to history
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Repaint the redone state
+    const img = new Image();
+    img.src = redoState;
+    img.onload = () => ctx.drawImage(img, 0, 0);
   };
 
   // Set up canvas size once the component is mounted
@@ -58,6 +111,9 @@ function Dashboard() {
     const canvas = canvasRef.current;
     canvas.width = 600;
     canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'white'; // Make sure the canvas starts with a white background
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }, []);
 
   return (
@@ -78,6 +134,12 @@ function Dashboard() {
       <button onClick={selectTool} className="tool-button">
         Select Drawing Tool: {tool}
       </button>
+
+      {/* Undo and Redo Buttons */}
+      <div>
+        <button onClick={undo} className="tool-button">Undo</button>
+        <button onClick={redo} className="tool-button">Redo</button>
+      </div>
     </div>
   );
 }

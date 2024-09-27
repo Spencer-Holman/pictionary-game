@@ -27,13 +27,26 @@
   .tool-button:hover {
     background-color: #0056b3;
   }
-  
+
   .drawing-area {
     border: 2px solid black;
     display: block;
     margin: 20px auto;
     background-color: white;
-    cursor: crosshair; /* Indicate that this area is for drawing */
+    cursor: crosshair;
   }
   
+  .tool-button {
+    margin: 10px;
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  
+  .tool-button:hover {
+    background-color: #0056b3;
+  }
   
