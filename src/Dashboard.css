@@ -28,3 +28,12 @@
     background-color: #0056b3;
   }
   
+  .drawing-area {
+    border: 2px solid black;
+    display: block;
+    margin: 20px auto;
+    background-color: white;
+    cursor: crosshair; /* Indicate that this area is for drawing */
+  }
+  
+  
