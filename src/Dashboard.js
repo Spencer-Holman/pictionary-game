@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import './Dashboard.css';
 
 function Dashboard() {
-  const [tool, setTool] = useState('Pencil');
+  const [tool, setTool] = useState('Pencil'); // Keep track of selected tool (Pencil or Eraser)
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
@@ -11,8 +11,9 @@ function Dashboard() {
   const [guess, setGuess] = useState(''); // API guess result
   const [timeoutId, setTimeoutId] = useState(null); // To debounce API requests
 
-  const selectTool = () => {
-    setTool('Pencil');
+  // Modify selectTool to allow selecting either Pencil or Eraser
+  const selectTool = (selectedTool) => {
+    setTool(selectedTool);
   };
 
   const saveCanvasState = () => {
@@ -53,10 +54,17 @@ function Dashboard() {
     ctx.beginPath();
     ctx.moveTo(lastPosition.x, lastPosition.y);
     ctx.lineTo(currentPosition.x, currentPosition.y);
-    ctx.strokeStyle = 'black'; 
-    ctx.lineWidth = 2;
-    ctx.stroke();
 
+    // Adjust strokeStyle and lineWidth based on selected tool
+    if (tool === 'Pencil') {
+      ctx.strokeStyle = 'black'; // Pencil color
+      ctx.lineWidth = 2; // Pencil thickness
+    } else if (tool === 'Eraser') {
+      ctx.strokeStyle = 'white'; // Eraser color (white background)
+      ctx.lineWidth = 10; // Eraser thickness (you can adjust this)
+    }
+
+    ctx.stroke();
     setLastPosition(currentPosition);
 
     // Trigger the API guess as the user draws
@@ -95,6 +103,15 @@ function Dashboard() {
       setCurrentStep(currentStep + 1); 
     }
   };
+    // Clear the entire canvas
+    const clearCanvas = () => {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the entire canvas
+      setHistory([]); // Reset the history
+      setCurrentStep(-1); // Reset the step count
+      setGuess(''); // Clear the guess result
+    };
 
   // Set up canvas size once the component is mounted
   useEffect(() => {
@@ -102,6 +119,7 @@ function Dashboard() {
     canvas.width = 600;
     canvas.height = 400;
   }, []);
+
 
 // Automatically check with API after short inactivity while drawing
 const triggerAPIGuess = async () => {
@@ -154,36 +172,36 @@ const triggerAPIGuess = async () => {
 
 
   return (
-    <div className="dashboard">
+    <div>
       <h1>Pictionary Game Dashboard</h1>
-      
-      <canvas
-        ref={canvasRef}
-        className="drawing-area"
-        onMouseDown={startDrawing}
-        onMouseUp={stopDrawing}
-        onMouseMove={draw}
-        onMouseLeave={stopDrawing}
-      ></canvas>
-      
-      <button onClick={selectTool} className="tool-button">
-        Select Drawing Tool: {tool}
-      </button>
-
-      {/* Undo and Redo Buttons */}
+      <canvas 
+        ref={canvasRef} 
+        onMouseDown={startDrawing} 
+        onMouseUp={stopDrawing} 
+        onMouseMove={draw} 
+        width={600} 
+        height={400} 
+        style={{ border: '1px solid black' }} 
+      />
       <div>
-        <button onClick={undo} className="undo-button" disabled={currentStep <= 0}>
-          Undo
+      <button onClick={() => selectTool('Pencil')}>
+          <span className="material-icons">create</span>
         </button>
-        <button onClick={redo} className="redo-button" disabled={currentStep >= history.length - 1}>
-          Redo
+        <button onClick={() => selectTool('Eraser')}>
+          <span className="material-symbols-outlined">ink_eraser</span>
+        </button>
+        <button onClick={undo} disabled={currentStep <= 0}>
+          <span className="material-icons">undo</span>
+        </button>
+        <button onClick={redo} disabled={currentStep >= history.length - 1}>
+          <span className="material-icons">redo</span>
+        </button>
+        <button onClick={clearCanvas}>
+          <span className="material-icons">delete</span>
         </button>
       </div>
-
-      {/* Display the API guess */}
-      {guess && <p>Guess: {guess}</p>}
+      <p>Guess: {guess}</p>
     </div>
   );
 }
-
 export default Dashboard;
