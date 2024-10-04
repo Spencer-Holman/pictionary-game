@@ -6,15 +6,23 @@ function Dashboard() {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
-  const [history, setHistory] = useState([]); // To store the drawing history
-  const [redoStack, setRedoStack] = useState([]); // To store undone states for redo
+  const [history, setHistory] = useState([]); 
+  const [currentStep, setCurrentStep] = useState(-1);
+  const [guess, setGuess] = useState(''); // API guess result
+  const [timeoutId, setTimeoutId] = useState(null); // To debounce API requests
 
-  // Select the drawing tool (you can add more tools later)
   const selectTool = () => {
-    setTool('Pencil'); // We'll expand this later
+    setTool('Pencil');
   };
 
-  // Start drawing when the mouse is pressed down
+  const saveCanvasState = () => {
+    const canvas = canvasRef.current;
+    const dataUrl = canvas.toDataURL(); 
+    const newHistory = history.slice(0, currentStep + 1); 
+    setHistory([...newHistory, dataUrl]); 
+    setCurrentStep(newHistory.length); 
+  };
+
   const startDrawing = (e) => {
     setIsDrawing(true);
     const rect = canvasRef.current.getBoundingClientRect();
@@ -24,20 +32,12 @@ function Dashboard() {
     });
   };
 
-  // Stop drawing when the mouse is released
   const stopDrawing = () => {
     if (!isDrawing) return;
-    
     setIsDrawing(false);
-
-    // Save the current canvas state to history after each drawing action
-    const canvas = canvasRef.current;
-    const canvasData = canvas.toDataURL();
-    setHistory([...history, canvasData]); // Add new canvas state to history
-    setRedoStack([]); // Clear the redo stack when new drawing occurs
+    saveCanvasState(); 
   };
 
-  // Draw on the canvas
   const draw = (e) => {
     if (!isDrawing) return;
 
@@ -53,57 +53,47 @@ function Dashboard() {
     ctx.beginPath();
     ctx.moveTo(lastPosition.x, lastPosition.y);
     ctx.lineTo(currentPosition.x, currentPosition.y);
-    ctx.strokeStyle = 'black'; // Set line color
-    ctx.lineWidth = 2; // Set line width
+    ctx.strokeStyle = 'black'; 
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    setLastPosition(currentPosition); // Update the last position
+    setLastPosition(currentPosition);
+
+    // Trigger the API guess as the user draws
+    if (timeoutId) clearTimeout(timeoutId); // Cancel previous timeout if any
+
+    const newTimeoutId = setTimeout(() => {
+      triggerAPIGuess();
+    }, 1500); // Wait for 1.5 seconds after drawing stops to trigger the API
+    setTimeoutId(newTimeoutId);
   };
 
-  // Undo function: revert to the previous state
   const undo = () => {
-    if (history.length === 0) return;
-
-    const newHistory = [...history];
-    const lastState = newHistory.pop(); // Remove the latest state
-    setRedoStack([...redoStack, lastState]); // Save the undone state in redo stack
-    setHistory(newHistory); // Update the history with the new version
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const previousState = newHistory[newHistory.length - 1]; // Get the previous state
-
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Repaint the previous state if it exists
-    if (previousState) {
-      const img = new Image();
-      img.src = previousState;
-      img.onload = () => ctx.drawImage(img, 0, 0);
+    if (currentStep > 0) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const previousState = new Image();
+      previousState.src = history[currentStep - 1];
+      previousState.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+        ctx.drawImage(previousState, 0, 0); 
+      };
+      setCurrentStep(currentStep - 1);
     }
   };
 
-  // Redo function: reapply the undone state
   const redo = () => {
-    if (redoStack.length === 0) return;
-
-    const newRedoStack = [...redoStack];
-    const redoState = newRedoStack.pop(); // Get the last undone state
-    setRedoStack(newRedoStack); // Update the redo stack
-
-    setHistory([...history, redoState]); // Add the redone state back to history
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Repaint the redone state
-    const img = new Image();
-    img.src = redoState;
-    img.onload = () => ctx.drawImage(img, 0, 0);
+    if (currentStep < history.length - 1) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const nextState = new Image();
+      nextState.src = history[currentStep + 1];
+      nextState.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+        ctx.drawImage(nextState, 0, 0); 
+      };
+      setCurrentStep(currentStep + 1); 
+    }
   };
 
   // Set up canvas size once the component is mounted
@@ -111,35 +101,80 @@ function Dashboard() {
     const canvas = canvasRef.current;
     canvas.width = 600;
     canvas.height = 400;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'white'; // Make sure the canvas starts with a white background
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }, []);
+
+  // Automatically check with API after short inactivity while drawing
+  const triggerAPIGuess = async () => {
+    const canvas = canvasRef.current;
+    const imageBase64 = canvas.toDataURL('image/png'); // Get the drawing as a base64 string
+
+    try {
+      const googleVisionAPIUrl = `https://vision.googleapis.com/v1/images:annotate?key=YOUR_GOOGLE_CLOUD_API_KEY`;
+
+      const response = await fetch(googleVisionAPIUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requests: [
+            {
+              image: {
+                content: imageBase64.replace(/^data:image\/\w+;base64,/, ''), // Clean base64 string
+              },
+              features: [
+                {
+                  type: 'LABEL_DETECTION', // Detect labels in the image (objects, scenes, etc.)
+                  maxResults: 5, // Limit the number of labels to 5 (you can adjust this)
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+      const data = await response.json();
+
+      // Extract the labels returned by Google Vision API
+      const labels = data.responses[0].labelAnnotations.map((label) => label.description).join(', ');
+
+      // Display the labels in the UI
+      setGuess(`Detected: ${labels}`);
+    } catch (error) {
+      console.error('Error analyzing image:', error);
+      setGuess('Error analyzing image.');
+    }
+  };
 
   return (
     <div className="dashboard">
       <h1>Pictionary Game Dashboard</h1>
       
-      {/* Drawing Area (Canvas) */}
       <canvas
         ref={canvasRef}
         className="drawing-area"
         onMouseDown={startDrawing}
         onMouseUp={stopDrawing}
         onMouseMove={draw}
-        onMouseLeave={stopDrawing} // Stop drawing if the mouse leaves the canvas
+        onMouseLeave={stopDrawing}
       ></canvas>
       
-      {/* Tool Selection Button */}
       <button onClick={selectTool} className="tool-button">
         Select Drawing Tool: {tool}
       </button>
 
       {/* Undo and Redo Buttons */}
       <div>
-        <button onClick={undo} className="tool-button">Undo</button>
-        <button onClick={redo} className="tool-button">Redo</button>
+        <button onClick={undo} className="undo-button" disabled={currentStep <= 0}>
+          Undo
+        </button>
+        <button onClick={redo} className="redo-button" disabled={currentStep >= history.length - 1}>
+          Redo
+        </button>
       </div>
+
+      {/* Display the API guess */}
+      {guess && <p>Guess: {guess}</p>}
     </div>
   );
 }
