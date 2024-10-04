@@ -103,48 +103,55 @@ function Dashboard() {
     canvas.height = 400;
   }, []);
 
-  // Automatically check with API after short inactivity while drawing
-  const triggerAPIGuess = async () => {
-    const canvas = canvasRef.current;
-    const imageBase64 = canvas.toDataURL('image/png'); // Get the drawing as a base64 string
+// Automatically check with API after short inactivity while drawing
+const triggerAPIGuess = async () => {
+  const canvas = canvasRef.current;
+  const imageBase64 = canvas.toDataURL('image/png'); // Get the drawing as a base64 string
 
-    try {
-      const googleVisionAPIUrl = `https://vision.googleapis.com/v1/images:annotate?key=YOUR_GOOGLE_CLOUD_API_KEY`;
+  try {
+    const googleVisionAPIUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.REACT_APP_GOOGLE_CLOUD_API_KEY}`;
 
-      const response = await fetch(googleVisionAPIUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          requests: [
-            {
-              image: {
-                content: imageBase64.replace(/^data:image\/\w+;base64,/, ''), // Clean base64 string
-              },
-              features: [
-                {
-                  type: 'LABEL_DETECTION', // Detect labels in the image (objects, scenes, etc.)
-                  maxResults: 5, // Limit the number of labels to 5 (you can adjust this)
-                },
-              ],
+    const response = await fetch(googleVisionAPIUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requests: [
+          {
+            image: {
+              content: imageBase64.replace(/^data:image\/\w+;base64,/, ''), // Clean base64 string
             },
-          ],
-        }),
-      });
+            features: [
+              {
+                type: 'LABEL_DETECTION', // Use LABEL_DETECTION to analyze the whole image
+                maxResults: 5, // Limit the number of labels (increase or decrease as necessary)
+              },
+            ],
+          },
+        ],
+      }),
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      // Extract the labels returned by Google Vision API
-      const labels = data.responses[0].labelAnnotations.map((label) => label.description).join(', ');
+    // Check if labelAnnotations exist to avoid errors
+    if (data.responses[0].labelAnnotations) {
+      // Sort the labels by confidence score and get the top one
+      const topLabel = data.responses[0].labelAnnotations
+        .sort((a, b) => b.score - a.score)[0].description;
 
-      // Display the labels in the UI
-      setGuess(`Detected: ${labels}`);
-    } catch (error) {
-      console.error('Error analyzing image:', error);
-      setGuess('Error analyzing image.');
+      // Display the top label in the UI
+      setGuess(`Detected: ${topLabel}`);
+    } else {
+      setGuess('No clear object detected. Try drawing more details.');
     }
-  };
+  } catch (error) {
+    console.error('Error analyzing image:', error);
+    setGuess('Error analyzing image.');
+  }
+};
+
 
   return (
     <div className="dashboard">
